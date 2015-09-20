@@ -1,0 +1,192 @@
+﻿@model AmazonSearch.Models.CurrencyModel
+@{
+    ViewBag.Title = "Amazon Search";
+}
+
+<div class="search_form_container">
+    <form class="form-horizontal" id="search_form" method="post">
+        <div class="form-group">
+            <div class="col-md-9">
+                <input class="form-control" type="text" name="search" id="search" placeholder="Search from all products.." />
+            </div>
+            <div class="col-md-1">
+                <button class="form-control btn btn-success" type="submit">Search</button>
+            </div>
+            <div class="col-md-2">
+                <select class="form-control" name="currency" id="currency">
+                    @foreach (var code in Model.currencyCodes)
+                    {
+                    <option value="@code" @(@code == Model.selectedCurrency ? "selected=\"selected\"" : "")>@code</option>
+                    }                  
+                </select>
+            </div>
+        </div>
+    </form>
+    
+</div>
+
+<div class="search_from_pager_container" style="display:none;">
+    <ul class="pager">
+        <li><a class="search_btn_prev" href="#">Previous</a></li>
+        <li><a class="search_btn_next" href="#">Next</a></li>
+    </ul>
+</div>
+
+<div id="loading_spinner" style="margin:0 auto;width:300px;display:none"><img src="~/Content/images/loading_spinner2.gif" /></div>
+
+<div class="row az-pagewrap">
+    <div id="search_results"></div>
+</div>
+
+<div class="search_from_pager_container" style="display:none;">
+    <ul class="pager">
+        <li><a class="search_btn_prev" href="#">Previous</a></li>
+        <li><a class="search_btn_next" href="#">Next</a></li>
+    </ul>
+</div>
+
+<script>
+    var amazon_search = {
+        loaded_pages: {},
+        total_pages: 0,
+        current_page: 1,
+        search_value: "",
+        selected_currency: "@Model.selectedCurrency.ToString()",
+        base_currency: "@Model.baseCurrency.ToString()",
+        rate:1.0,
+
+        init: function () {
+            var _this = this;
+
+            $(".search_btn_next").click(function () {
+                _this.getPage(_this.current_page + 1);
+            });
+            $(".search_btn_prev").click(function () {
+                _this.getPage(_this.current_page - 1);
+            });
+
+            $("#currency").change(function () {
+                _this.selected_currency = $("#currency").val();
+                _this.updatePrices();
+            });
+
+            $("#search_form").submit(function (event) {
+                //dont submit
+                event.preventDefault();
+                _this.search_value = $("#search").val();
+                _this.loaded_pages = {};
+                _this.current_page = 1;
+                _this.total_pages = 0;
+
+                if(_this.search_value)
+                    _this.getPage(1);
+            });
+        },
+
+        updatePrices: function() {
+            var _this = this;
+            var url = "@Url.Action("GetCurrencyRate", "Home")";
+            var data = { selected_currency: this.selected_currency };
+            $.post(
+                url,
+                data,
+                function (rate) {
+                    _this.updatePricesCallback(rate);
+                });
+        },
+
+        updatePricesCallback: function (rate) {
+            this.rate = parseFloat(rate['rate']);
+
+            if(this.search_value)
+                this.getPage(this.current_page);
+
+        },
+
+        getPage: function (page_nr) {
+
+            if (page_nr < 1 || (this.total_pages && page_nr >= this.total_pages)) return;
+
+            $("#search_results").html('');
+            $("#loading_spinner").show();
+
+            //take data from cache
+            if (this.loaded_pages[page_nr]) {
+
+                var model_data = this.loaded_pages[page_nr]['pageData'];
+
+                var html = "";
+                html += '<table class="table table-bordered table-hover">';
+                html += '<tr>';
+                html += '<th>Nr.</th><th>Title</th><th>Price</th><th>Image</th>';
+                html += '</tr>';
+
+                var index = 1;
+                for (var product in model_data['Products']) {
+                    var img_url = model_data['Products'][product]['Image'] ? model_data['Products'][product]['Image'].URL : '';
+                    var price = model_data['Products'][product]['FormattedPrice'];
+                    var title = model_data['Products'][product]['Title'];
+                    var link = model_data['Products'][product]['Link'];
+
+                    if(!model_data['Products'][product]['FormattedPrice'] || model_data['Products'][product]['FormattedPrice'] == '')
+                        price = '';
+
+                    if (price) {
+                        price = price.replace('$', '');                      
+                        price = (parseFloat(price) * this.rate).toFixed(2) + " " + this.selected_currency;
+                    }
+
+                    html += '<tr>';
+                    html += '<td>' + index + '</td>';
+                    html += '<td><a href=' + link + ' target="_blank">' + title + '</a></td>';
+                    html += '<td>' + price + '</td>';
+                    html += '<td><img src="' + img_url + '"></td>';
+                    html += '</tr>';
+
+                    index++;
+                }
+
+                html += '</table>';
+
+                $("#loading_spinner").hide();
+                $("#search_results").html(html);
+
+                this.total_pages  = model_data['PageCount'];
+                this.current_page = page_nr;
+
+                if (this.total_pages > 1) {
+                    $(".search_from_pager_container").show();
+                }
+
+            }
+            else this.cachePage(page_nr);
+
+            //add remove disable classes for next/previous buttons
+            this.current_page == 1 ? $(".search_btn_prev").parent().addClass("disabled") : $(".search_btn_prev").parent().removeClass("disabled");
+            this.current_page < this.total_pages - 1 ? $(".search_btn_next").parent().removeClass("disabled") : $(".search_btn_next").parent().addClass("disabled");
+
+        },
+
+        cachePage: function (page_nr) {
+            var _this = this;
+            var url = "@Url.Action("GetSearchResults", "Home")";
+            var data = { search_value: this.search_value, page: page_nr };
+            $.post(
+                url,
+                data,
+                function (data) {
+                    _this.cachePageCallback(data,page_nr);
+                });
+        },
+
+        cachePageCallback: function (data, page_nr) {
+            this.loaded_pages[page_nr] = data;
+            this.getPage(page_nr);
+        }
+    };
+
+
+    $(document).ready(function () {
+        amazon_search.init();
+    });
+</script>
