@@ -121,18 +121,18 @@
                 html += '<th>Nr.</th><th>Title</th><th>Price</th><th>Image</th>';
                 html += '</tr>';
 
-                var index = 1;
+                var index = ((page_nr - 1 ) * 13) + 1;
                 for (var product in model_data['Products']) {
                     var img_url = model_data['Products'][product]['Image'] ? model_data['Products'][product]['Image'].URL : '';
                     var price = model_data['Products'][product]['FormattedPrice'];
                     var title = model_data['Products'][product]['Title'];
                     var link = model_data['Products'][product]['Link'];
 
-                    if(!model_data['Products'][product]['FormattedPrice'] || model_data['Products'][product]['FormattedPrice'] == '')
+                    if (!model_data['Products'][product]['FormattedPrice'] || model_data['Products'][product]['FormattedPrice'] == '')
                         price = '';
 
                     if (price) {
-                        price = price.replace('$', '');                      
+                        price = price.replace('$', '');
                         price = (parseFloat(price) * this.rate).toFixed(2) + " " + this.selected_currency;
                     }
 
@@ -151,7 +151,7 @@
                 $("#loading_spinner").hide();
                 $("#search_results").html(html);
 
-                this.total_pages  = model_data['PageCount'];
+                this.total_pages = model_data['PageCount'];
                 this.current_page = page_nr;
 
                 if (this.total_pages > 1) {
@@ -159,7 +159,14 @@
                 }
 
             }
-            else this.cachePage(page_nr);
+            else {
+                this.cachePage(page_nr,true);
+                //this.getPage(page_nr);
+            }
+
+            //load next page
+            if (this.loaded_pages[page_nr] && !this.loaded_pages[page_nr+1])
+                this.cachePage(page_nr + 1, false);
 
             //add remove disable classes for next/previous buttons
             this.current_page == 1 ? $(".search_btn_prev").parent().addClass("disabled") : $(".search_btn_prev").parent().removeClass("disabled");
@@ -167,7 +174,7 @@
 
         },
 
-        cachePage: function (page_nr) {
+        cachePage: function (page_nr, load_page) {
             var _this = this;
             var url = "@Url.Action("GetSearchResults", "Home")";
             var data = { search_value: this.search_value, page: page_nr };
@@ -175,13 +182,16 @@
                 url,
                 data,
                 function (data) {
-                    _this.cachePageCallback(data,page_nr);
+                    _this.cachePageCallback(data,page_nr,load_page);
                 });
         },
 
-        cachePageCallback: function (data, page_nr) {
+        cachePageCallback: function (data, page_nr, load_page) {
             this.loaded_pages[page_nr] = data;
-            this.getPage(page_nr);
+
+            if (load_page == true) {
+                this.getPage(page_nr);                
+            }
         }
     };
 
